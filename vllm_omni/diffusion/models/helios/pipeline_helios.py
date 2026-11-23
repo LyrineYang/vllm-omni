@@ -23,6 +23,7 @@ from typing_extensions import override
 from vllm.model_executor.models.utils import AutoWeightsLoader
 from vllm.utils.math_utils import round_down
 
+from vllm_omni.diffusion.cache.cachedit import set_separate_cfg
 from vllm_omni.diffusion.data import DiffusionOutput, OmniDiffusionConfig
 from vllm_omni.diffusion.distributed.cfg_parallel import CFGParallelMixin
 from vllm_omni.diffusion.distributed.utils import get_local_device
@@ -1114,6 +1115,9 @@ class HeliosPipeline(
             prompt_embeds = prompt_embeds.to(device=device, dtype=dtype)
             if negative_prompt_embeds is not None:
                 negative_prompt_embeds = negative_prompt_embeds.to(device=device, dtype=dtype)
+
+        # Use the CFG condition shared by both sampling loops for every request.
+        set_separate_cfg(self.transformer, self.do_classifier_free_guidance and negative_prompt_embeds is not None)
 
         batch_size = prompt_embeds.shape[0]
 

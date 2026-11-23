@@ -836,7 +836,13 @@ class HeliosTransformer3DModel(nn.Module):
         # Track all projection parameters, including norm/quantization/adapter
         # parameters registered in these modules. Inference-mode parameters lack
         # a reliable counter, so disable reuse for that case.
-        modules = [self.condition_embedder.text_embedder, *(block.attn2 for block in self.blocks)]
+        modules: list[nn.Module] = [self.condition_embedder.text_embedder]
+        for block in self.blocks:
+            # Cache-DiT may wrap the blocks without exposing each layer's attention.
+            attention = getattr(block, "attn2", None)
+            if attention is None:
+                return None
+            modules.append(attention)
         dependencies = tuple(t for module in modules for t in (*module.parameters(), *module.buffers()))
         versions = tuple((tensor_version(t), t.dtype, t.device) for t in dependencies)
         if any(version is None for version, _, _ in versions):
@@ -858,7 +864,7 @@ class HeliosTransformer3DModel(nn.Module):
             return projected, None
         revision = self._conditioning_projection_revision()
         if revision is None:
-            # Drop any prior value before using unversioned weights.
+            # Drop any prior value when projection reuse is unavailable.
             cache.invalidate()
             projected = self.condition_embedder.text_embedder(source)
             return projected, None
